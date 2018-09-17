@@ -1,0 +1,12 @@
+postgresql:
+  type: postgresql:9.6
+  disk: 2048
+  configuration:
+    extensions:
+      - hstore
+      - pg_trgm
+
+redis:
+  type: redis:3.2
+
+
