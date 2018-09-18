@@ -10,7 +10,7 @@ hooks:
 
         [ -d "$PLATFORM_CACHE_DIR/bundle" ] && cp -rp "$PLATFORM_CACHE_DIR/bundle" vendor/bundle
         bundle install --deployment --verbose --without test --without development --retry 3 --jobs 4
- 
+
         rm -rf "$PLATFORM_CACHE_DIR/bundle"
         cp -rp vendor/bundle "$PLATFORM_CACHE_DIR/bundle"
 
@@ -36,4 +36,15 @@ web:
             passthru: true
             expires: 1h
             allow: true
-
+        "/assets":
+            root: "public/assets"
+            expires: 1y
+            allow: true
+        "/plugins":
+            root: "public/plugins"
+            expires: 1y
+            allow: true
+        "/images/emoji":
+            root: "public/images/emoji"
+            expires: 1y
+            allow: true
