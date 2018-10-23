@@ -23,6 +23,7 @@ mounts:
    "/tmp": "shared:files/tmp"
    "/public/plugins": "shared:files/plugins"
    "/public/assets": "shared:files/assets"
+   "/public/uploads": "shared:files/uploads"
 
 web:
     upstream:
