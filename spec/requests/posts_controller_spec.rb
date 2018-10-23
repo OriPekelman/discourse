@@ -295,6 +295,13 @@ describe PostsController do
         expect(post.raw).to eq("edited body")
       end
 
+      it 'checks for an edit conflict' do
+        update_params[:post][:raw_old] = 'old body'
+        put "/posts/#{post.id}.json", params: update_params
+
+        expect(response.status).to eq(409)
+      end
+
       it "raises an error when the post parameter is missing" do
         update_params.delete(:post)
         put "/posts/#{post.id}.json", params: update_params
@@ -1459,6 +1466,20 @@ describe PostsController do
 
       expect(body).to_not include(private_post.url)
       expect(body).to include(public_post.url)
+    end
+
+    it 'returns public posts as JSON' do
+      public_post
+      private_post
+
+      get "/u/#{user.username}/activity.json"
+
+      expect(response.status).to eq(200)
+
+      body = response.body
+
+      expect(body).to_not include(private_post.topic.slug)
+      expect(body).to include(public_post.topic.slug)
     end
   end
 
