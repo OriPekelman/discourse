@@ -13,6 +13,7 @@ hooks:
 
         rm -rf "$PLATFORM_CACHE_DIR/bundle"
         cp -rp vendor/bundle "$PLATFORM_CACHE_DIR/bundle"
+    deploy: bundle exec rake db:migrate
 
 relationships:
     postgresql: "postgresql:postgresql"
@@ -24,6 +25,10 @@ mounts:
    "/public/uploads": "shared:files/uploads"
    "/public/plugins": "shared:files/plugins"
    "/public/assets": "shared:files/assets"
+dependecies:
+  nodejs:
+    svgo: "*"
+    phantomjs-prebuilt: "*"
 
 web:
     upstream:
