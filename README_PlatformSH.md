@@ -36,4 +36,7 @@ create `config/discourse.conf` and remove it from `.gitignore`
 
 Add `.platform.app.yaml` and `.platform/routes.yaml` and  `.platform/services.yaml`
 
-Changed `Procfile`
+Created `Procfile_platform_sh`
+
+## On first run
+`platform ssh` and `bundle exec rake admin:create`
