@@ -19,7 +19,7 @@ hooks:
         curl -O http://www.sentex.net/~mwandel/jhead/jhead-$JHEAD_VERSION.tar.gz \
           && tar zxf jhead-$JHEAD_VERSION.tar.gz \
           && cd jhead-$JHEAD_VERSION \
-          && make && make install
+          && make && mv jhead $HOME/.global/bin/jhead
     deploy: |
         bundle exec rake db:migrate
         cp -R _images/* public/images/
