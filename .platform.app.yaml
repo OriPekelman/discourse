@@ -14,9 +14,13 @@ hooks:
         mv public/images _images
         rm -rf "$PLATFORM_CACHE_DIR/bundle"
         cp -rp vendor/bundle "$PLATFORM_CACHE_DIR/bundle"
-        wget http://www.sentex.net/~mwandel/jhead/jhead
-        chmod +x jhead
-        mv jhead /app/.global/bin/jhead
+        pushd .
+        cd /tmp
+        curl -O http://www.sentex.net/~mwandel/jhead/jhead-$JHEAD_VERSION.tar.gz \
+          && tar zxf jhead-$JHEAD_VERSION.tar.gz \
+          && cd jhead-$JHEAD_VERSION \
+          && make && make install \
+          && popd
     deploy: |
         bundle exec rake db:migrate
         cp -R _images/* public/images/
