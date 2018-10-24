@@ -1,0 +1,4 @@
+[submodule "plugins/discourse-oauth2-basic"]
+	path = plugins/discourse-oauth2-basic
+	url = https://github.com/discourse/discourse-oauth2-basic
+	branch = master
