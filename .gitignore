@@ -54,6 +54,9 @@ bootsnap-compile-cache/
 !/plugins/discourse-local-dates
 /plugins/*/auto_generated/
 !/plugins/discourse-oauth2-basic
+!/plugins/procourse-static-pages
+!/plugins/procourse-custom-homepage
+!/plugins/discourse-chat-integration
 /spec/fixtures/plugins/my_plugin/auto_generated
 
 # Ignore Eclipse .project file
