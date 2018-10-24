@@ -481,6 +481,9 @@ class Plugin::Instance
       target << name.gsub(/\s/, "_")
       # TODO a cleaner way of registering and unregistering
       Discourse::Utils.execute_command('rm', '-f', target)
+      # TODO This is for debugging. 
+      puts public_data
+      puts target
       Discourse::Utils.execute_command('ln', '-s', public_data, target)
     end
   end
