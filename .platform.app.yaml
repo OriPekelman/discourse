@@ -14,6 +14,9 @@ hooks:
         mv public/images _images
         rm -rf "$PLATFORM_CACHE_DIR/bundle"
         cp -rp vendor/bundle "$PLATFORM_CACHE_DIR/bundle"
+        wget http://www.sentex.net/~mwandel/jhead/jhead
+        chmod +x jhead
+        mv jhead /app/.global/bin/jhead
     deploy: |
         bundle exec rake db:migrate
         cp -R _images/* public/images/
@@ -21,6 +24,8 @@ hooks:
 dependencies:
   nodejs:
     yarn: "*"
+    svgo: "*"
+    gifsicle: "*"
   ruby:
     foreman: "*"
 relationships:
@@ -28,6 +33,7 @@ relationships:
     redis: "redis:redis"
 variables:
     env:
+        GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
         RUBY_GC_HEAP_GROWTH_MAX_SLOTS: "40000"
         RUBY_GC_HEAP_INIT_SLOTS: "400000"
         RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR: "1.5"
