@@ -22,8 +22,10 @@ hooks:
           && make && mv jhead $HOME/.global/bin/jhead
     deploy: |
         bundle exec rake db:migrate
+    post_deploy: |
+        set -e
         cp -R _images/* public/images/
-        GIT_DISCOVERY_ACROSS_FILESYSTEM=1 RAILS_ENV=production bundle exec bin/rake
+        GIT_DISCOVERY_ACROSS_FILESYSTEM=1 RAILS_ENV=production bundle exec bin/rake assets:precompile
 dependencies:
   nodejs:
     yarn: "*"
