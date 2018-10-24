@@ -13,6 +13,7 @@ end
 
 require File.expand_path('../boot', __FILE__)
 require 'rails/all'
+require 'platform_sh_rails'
 
 # Plugin related stuff
 require_relative '../lib/discourse_event'
