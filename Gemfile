@@ -195,4 +195,4 @@ end
 gem 'webpush', require: false
 gem 'colored2', require: false
 gem 'maxminddb'
-gem 'platform_sh_rails' 
+gem 'platform_sh_rails', '~> 0.1.8'
