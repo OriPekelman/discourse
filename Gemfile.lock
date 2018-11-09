@@ -385,9 +385,14 @@ GEM
       crass (~> 1.0.2)
       nokogiri (>= 1.8.0)
       nokogumbo (~> 2.0)
-    sassc (2.0.0)
+    sass (3.7.2)
+      sass-listen (~> 4.0.0)
+    sass-listen (4.0.0)
+      rb-fsevent (~> 0.9, >= 0.9.4)
+      rb-inotify (~> 0.9, >= 0.9.7)
+    sassc (1.12.1)
       ffi (~> 1.9.6)
-      rake
+      sass (>= 3.3.0)
     sawyer (0.8.1)
       addressable (>= 2.3.5, < 2.6)
       faraday (~> 0.8, < 1.0)
@@ -542,7 +547,7 @@ DEPENDENCIES
   ruby-prof
   ruby-readability
   sanitize
-  sassc
+  sassc (~> 1.0)
   seed-fu
   shoulda
   sidekiq
