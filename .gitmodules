@@ -14,3 +14,6 @@
 	path = plugins/discourse-chat-integration
 	url = https://github.com/discourse/discourse-chat-integration.git
 	branch = master
+[submodule "plugins/discourse-platformsh-customizations-plugin"]
+	path = plugins/discourse-platformsh-customizations-plugin
+	url = git@github.com:procourse/discourse-platformsh-customizations-plugin.git
