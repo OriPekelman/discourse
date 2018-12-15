@@ -57,6 +57,7 @@ bootsnap-compile-cache/
 !/plugins/procourse-static-pages
 !/plugins/procourse-custom-homepage
 !/plugins/discourse-chat-integration
+!/plugins/discourse-platformsh-customizations-plugin
 /spec/fixtures/plugins/my_plugin/auto_generated
 
 # Ignore Eclipse .project file
