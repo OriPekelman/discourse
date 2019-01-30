@@ -55,20 +55,26 @@ class Search
   end
 
   def self.prepare_data(search_data, purpose = :query)
-    data = search_data.squish
-    # TODO cppjieba_rb is designed for chinese, we need something else for Japanese
-    # Korean appears to be safe cause words are already space seperated
-    # For Japanese we should investigate using kakasi
-    if ['zh_TW', 'zh_CN', 'ja'].include?(SiteSetting.default_locale) || SiteSetting.search_tokenize_chinese_japanese_korean
-      require 'cppjieba_rb' unless defined? CppjiebaRb
-      mode = (purpose == :query ? :query : :mix)
-      data = CppjiebaRb.segment(search_data, mode: mode)
-      data = CppjiebaRb.filter_stop_word(data).join(' ')
-    end
+    purpose ||= :query
 
+    data = search_data.dup
     data.force_encoding("UTF-8")
-    if SiteSetting.search_ignore_accents
-      data = strip_diacritics(data)
+    if purpose != :topic
+      # TODO cppjieba_rb is designed for chinese, we need something else for Japanese
+      # Korean appears to be safe cause words are already space seperated
+      # For Japanese we should investigate using kakasi
+      if ['zh_TW', 'zh_CN', 'ja'].include?(SiteSetting.default_locale) || SiteSetting.search_tokenize_chinese_japanese_korean
+        require 'cppjieba_rb' unless defined? CppjiebaRb
+        mode = (purpose == :query ? :query : :mix)
+        data = CppjiebaRb.segment(search_data, mode: mode)
+        data = CppjiebaRb.filter_stop_word(data).join(' ')
+      else
+        data.squish!
+      end
+
+      if SiteSetting.search_ignore_accents
+        data = strip_diacritics(data)
+      end
     end
     data
   end
@@ -155,7 +161,7 @@ class Search
     term = process_advanced_search!(term)
 
     if term.present?
-      @term = Search.prepare_data(term)
+      @term = Search.prepare_data(term, Topic === @search_context ? :topic : nil)
       @original_term = PG::Connection.escape_string(@term)
     end
 
@@ -221,7 +227,7 @@ class Search
     end
 
     # If the term is a number or url to a topic, just include that topic
-    if @opts[:search_for_id] && @results.type_filter == 'topic'
+    if @opts[:search_for_id] && (@results.type_filter == 'topic' || @results.type_filter == 'private_messages')
       if @term =~ /^\d+$/
         single_topic(@term.to_i)
       else
@@ -623,7 +629,14 @@ class Search
 
   # If we're searching for a single topic
   def single_topic(id)
-    post = Post.find_by(topic_id: id, post_number: 1)
+    if @opts[:restrict_to_archetype].present?
+      archetype = @opts[:restrict_to_archetype] == Archetype.default ? Archetype.default : Archetype.private_message
+      post = Post.joins(:topic)
+        .where("topics.id = :id AND topics.archetype = :archetype AND posts.post_number = 1", id: id, archetype: archetype)
+        .first
+    else
+      post = Post.find_by(topic_id: id, post_number: 1)
+    end
     return nil unless @guardian.can_see?(post)
 
     @results.add(post)
@@ -826,7 +839,7 @@ class Search
     ts_config = ActiveRecord::Base.connection.quote(ts_config) if ts_config
     all_terms = data.scan(/'([^']+)'\:\d+/).flatten
     all_terms.map! do |t|
-      t.split(/[\)\(&']/)[0]
+      t.split(/[\)\(&']/).find(&:present?)
     end.compact!
 
     query = ActiveRecord::Base.connection.quote(

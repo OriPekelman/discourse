@@ -39,6 +39,10 @@
   .wrapper {
     display: table-row;
   }
+
+  .new-private-message {
+    margin-bottom: 15px;
+  }
 }
 
 .user-profile-hidden {
@@ -57,7 +61,7 @@
       border-bottom: none;
 
       &.archive {
-        padding-left: 15px;
+        padding-left: 1.81em;
       }
     }
 
@@ -195,8 +199,8 @@
       float: right;
       text-align: right;
 
-      a {
-        width: 140px;
+      .btn {
+        min-width: 140px;
       }
 
       .right {
@@ -270,7 +274,7 @@
   padding-left: 30px;
 
   .form-vertical {
-    width: 400px;
+    width: 500px;
     max-width: 100%;
   }
 

@@ -16,7 +16,8 @@ export default Ember.Controller.extend({
     { id: 0, name: "common" },
     { id: 1, name: "desktop" },
     { id: 2, name: "mobile" },
-    { id: 3, name: "settings" }
+    { id: 3, name: "settings" },
+    { id: 4, name: "translations" }
   ],
 
   fieldsForTarget: function(target) {
@@ -154,7 +155,7 @@ export default Ember.Controller.extend({
 
   @computed("maximized")
   maximizeIcon(maximized) {
-    return maximized ? "compress" : "expand";
+    return maximized ? "discourse-compress" : "discourse-expand";
   },
 
   @computed("model.isSaving")
@@ -179,7 +180,7 @@ export default Ember.Controller.extend({
 
     toggleMaximize: function() {
       this.toggleProperty("maximized");
-      Em.run.next(() => {
+      Ember.run.next(() => {
         this.appEvents.trigger("ace:resize");
       });
     }

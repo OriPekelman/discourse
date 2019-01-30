@@ -21,6 +21,10 @@ class User < ActiveRecord::Base
   include SecondFactorManager
   include HasDestroyedWebHook
 
+  self.ignored_columns = %w{
+    group_locked_trust_level
+  }
+
   has_many :posts
   has_many :notifications, dependent: :destroy
   has_many :topic_users, dependent: :destroy
@@ -29,8 +33,11 @@ class User < ActiveRecord::Base
   has_many :user_api_keys, dependent: :destroy
   has_many :topics
   has_many :user_open_ids, dependent: :destroy
-  has_many :user_actions, dependent: :destroy
-  has_many :post_actions, dependent: :destroy
+
+  # dependent deleting handled via before_destroy
+  has_many :user_actions
+  has_many :post_actions
+
   has_many :user_badges, -> { where('user_badges.badge_id IN (SELECT id FROM badges WHERE enabled)') }, dependent: :destroy
   has_many :badges, through: :user_badges
   has_many :email_logs, dependent: :delete_all
@@ -61,8 +68,7 @@ class User < ActiveRecord::Base
 
   has_one :user_option, dependent: :destroy
   has_one :user_avatar, dependent: :destroy
-  has_one :facebook_user_info, dependent: :destroy
-  has_one :twitter_user_info, dependent: :destroy
+  has_many :user_associated_accounts, dependent: :destroy
   has_one :github_user_info, dependent: :destroy
   has_one :google_user_info, dependent: :destroy
   has_many :oauth2_user_infos, dependent: :destroy
@@ -119,6 +125,7 @@ class User < ActiveRecord::Base
   after_save :badge_grant
   after_save :expire_old_email_tokens
   after_save :index_search
+  after_save :check_site_contact_username
   after_commit :trigger_user_created_event, on: :create
   after_commit :trigger_user_destroyed_event, on: :destroy
 
@@ -126,6 +133,11 @@ class User < ActiveRecord::Base
     # These tables don't have primary keys, so destroying them with activerecord is tricky:
     PostTiming.where(user_id: self.id).delete_all
     TopicViewItem.where(user_id: self.id).delete_all
+    UserAction.where('user_id = :user_id OR target_user_id = :user_id OR acting_user_id = :user_id', user_id: self.id).delete_all
+
+    # we need to bypass the default scope here, which appears not bypassed for :delete_all
+    # however :destroy it is bypassed
+    PostAction.with_deleted.where(user_id: self.id).delete_all
   end
 
   # Skip validating email, for example from a particular auth provider plugin
@@ -342,6 +354,17 @@ class User < ActiveRecord::Base
     find_by(username_lower: username.downcase)
   end
 
+  def group_granted_trust_level
+    GroupUser
+      .where(user_id: id)
+      .includes(:group)
+      .maximum("groups.grant_trust_level")
+  end
+
+  def visible_groups
+    groups.visible_groups(self)
+  end
+
   def enqueue_welcome_message(message_type)
     return unless SiteSetting.send_welcome_message?
     Jobs.enqueue(:send_system_message, user_id: id, message_type: message_type)
@@ -434,24 +457,41 @@ class User < ActiveRecord::Base
     @unread_pms ||= unread_notifications_of_type(Notification.types[:private_message])
   end
 
+  # PERF: This safeguard is in place to avoid situations where
+  # a user with enormous amounts of unread data can issue extremely
+  # expensive queries
+  MAX_UNREAD_NOTIFICATIONS = 99
+
+  def self.max_unread_notifications
+    @max_unread_notifications ||= MAX_UNREAD_NOTIFICATIONS
+  end
+
+  def self.max_unread_notifications=(val)
+    @max_unread_notifications = val
+  end
+
   def unread_notifications
     @unread_notifications ||= begin
       # perf critical, much more efficient than AR
       sql = <<~SQL
-          SELECT COUNT(*)
-            FROM notifications n
-       LEFT JOIN topics t ON t.id = n.topic_id
-           WHERE t.deleted_at IS NULL
-             AND n.notification_type <> :pm
-             AND n.user_id = :user_id
-             AND n.id > :seen_notification_id
-             AND NOT read
+        SELECT COUNT(*) FROM (
+          SELECT 1 FROM
+          notifications n
+          LEFT JOIN topics t ON t.id = n.topic_id
+           WHERE t.deleted_at IS NULL AND
+            n.notification_type <> :pm AND
+            n.user_id = :user_id AND
+            n.id > :seen_notification_id AND
+            NOT read
+          LIMIT :limit
+        ) AS X
       SQL
 
       DB.query_single(sql,
         user_id: id,
         seen_notification_id: seen_notification_id,
-        pm:  Notification.types[:private_message]
+        pm: Notification.types[:private_message],
+        limit: User.max_unread_notifications
     )[0].to_i
     end
   end
@@ -521,7 +561,6 @@ class User < ActiveRecord::Base
     payload = {
       unread_notifications: unread_notifications,
       unread_private_messages: unread_private_messages,
-      total_unread_notifications: total_unread_notifications,
       read_first_notification: read_first_notification?,
       last_notification: json,
       recent: recent,
@@ -753,12 +792,12 @@ class User < ActiveRecord::Base
     (since_reply.count >= SiteSetting.newuser_max_replies_per_topic)
   end
 
-  def delete_all_posts!(guardian)
+  def delete_posts_in_batches(guardian, batch_size = 20)
     raise Discourse::InvalidAccess unless guardian.can_delete_all_posts? self
 
     QueuedPost.where(user_id: id).delete_all
 
-    posts.order("post_number desc").each do |p|
+    posts.order("post_number desc").limit(batch_size).each do |p|
       PostDestroyer.new(guardian.user, p).destroy
     end
   end
@@ -925,7 +964,7 @@ class User < ActiveRecord::Base
       .where.not(post_id: disagreed_flag_post_ids)
       .each do |tl|
       begin
-        message = I18n.t('flag_reason.spam_hosts', domain: tl.domain)
+        message = I18n.t('flag_reason.spam_hosts', domain: tl.domain, base_path: Discourse.base_path)
         PostAction.act(Discourse.system_user, tl.post, PostActionType.types[:spam], message: message)
       rescue PostAction::AlreadyActed
         # If the user has already acted, just ignore it
@@ -1343,6 +1382,13 @@ class User < ActiveRecord::Base
     true
   end
 
+  def check_site_contact_username
+    if (saved_change_to_admin? || saved_change_to_moderator?) &&
+        self.username == SiteSetting.site_contact_username && !staff?
+      SiteSetting.set_and_log(:site_contact_username, SiteSetting.defaults[:site_contact_username])
+    end
+  end
+
   def self.ensure_consistency!
     DB.exec <<~SQL
       UPDATE users
@@ -1397,7 +1443,6 @@ end
 #  staged                    :boolean          default(FALSE), not null
 #  first_seen_at             :datetime
 #  silenced_till             :datetime
-#  group_locked_trust_level  :integer
 #  manual_locked_trust_level :integer
 #
 # Indexes

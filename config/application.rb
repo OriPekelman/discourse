@@ -1,13 +1,15 @@
 # frozen_string_literal: true
 
+# note, we require 2.5.2 and up cause 2.5.1 had some mail bugs we no longer
+# monkey patch, so this avoids people booting with this problem version
 begin
-  if !RUBY_VERSION.match?(/^2\.[456]/)
-    STDERR.puts "Discourse requires Ruby 2.4.0 or up"
+  if !RUBY_VERSION.match?(/^2\.(([67])|(5\.[2-9]))/)
+    STDERR.puts "Discourse requires Ruby 2.5.2 or up"
     exit 1
   end
 rescue
   # no String#match?
-  STDERR.puts "Discourse requires Ruby 2.4.0 or up"
+  STDERR.puts "Discourse requires Ruby 2.5.2 or up"
   exit 1
 end
 
@@ -75,6 +77,8 @@ module Discourse
     # issue is image_optim crashes on missing dependencies
     config.assets.image_optim = false
 
+    config.assets.gzip = false 
+    
     # Custom directories with classes and modules you want to be autoloadable.
     config.autoload_paths += Dir["#{config.root}/app/serializers"]
     config.autoload_paths += Dir["#{config.root}/lib/validators/"]
@@ -121,7 +125,13 @@ module Discourse
       google-tag-manager.js
       google-universal-analytics.js
       preload-application-data.js
-      authentication-complete.js
+      print-page.js
+      omniauth-complete.js
+      activate-account.js
+      auto-redirect.js
+      wizard-start.js
+      onpopstate-handler.js
+      embed-application.js
     }
 
     # Precompile all available locales
@@ -130,7 +140,10 @@ module Discourse
         config.assets.precompile << "locales/#{file.match(/([a-z_A-Z]+\.js)\.erb$/)[1]}"
       end
     end
+    
+    # We probably don't need or want gzip
 
+    
     # out of the box sprockets 3 grabs loose files that are hanging in assets,
     # the exclusion list does not include hbs so you double compile all this stuff
     initializer :fix_sprockets_loose_file_searcher, after: :set_default_precompile do |app|
@@ -191,7 +204,12 @@ module Discourse
     # supports etags (post 1.7)
     config.middleware.delete Rack::ETag
 
-    require 'content_security_policy'
+    unless Rails.env.development?
+      require 'middleware/enforce_hostname'
+      config.middleware.insert_after Rack::MethodOverride, Middleware::EnforceHostname
+    end
+
+    require 'content_security_policy/middleware'
     config.middleware.swap ActionDispatch::ContentSecurityPolicy::Middleware, ContentSecurityPolicy::Middleware
 
     require 'middleware/discourse_public_exceptions'
@@ -233,6 +251,7 @@ module Discourse
     end
 
     require_dependency 'stylesheet/manager'
+    require_dependency 'svg_sprite/svg_sprite'
 
     config.after_initialize do
       # require common dependencies that are often required by plugins

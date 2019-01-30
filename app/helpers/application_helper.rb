@@ -58,7 +58,7 @@ module ApplicationHelper
     request.env["HTTP_ACCEPT_ENCODING"] =~ /br/
   end
 
-  def preload_script(script)
+  def script_asset_path(script)
     path = asset_path("#{script}.js")
 
     if GlobalSetting.use_s3? && GlobalSetting.s3_cdn_url
@@ -89,6 +89,12 @@ module ApplicationHelper
       end
     end
 
+    path
+  end
+
+  def preload_script(script)
+    path = script_asset_path(script)
+
 "<link rel='preload' href='#{path}' as='script'/>
 <script src='#{path}'></script>".html_safe
   end
@@ -103,7 +109,13 @@ module ApplicationHelper
   end
 
   def html_classes
-    "#{mobile_view? ? 'mobile-view' : 'desktop-view'} #{mobile_device? ? 'mobile-device' : 'not-mobile-device'} #{rtl_class} #{current_user ? '' : 'anon'}"
+    list = []
+    list << (mobile_view? ? 'mobile-view' : 'desktop-view')
+    list << (mobile_device? ? 'mobile-device' : 'not-mobile-device')
+    list << 'rtl' if rtl?
+    list << text_size_class
+    list << 'anon' unless current_user
+    list.join(' ')
   end
 
   def body_classes
@@ -120,8 +132,16 @@ module ApplicationHelper
     result.join(' ')
   end
 
-  def rtl_class
-    rtl? ? 'rtl' : ''
+  def text_size_class
+    requested_cookie_size, cookie_seq = cookies[:text_size]&.split("|")
+    server_seq = current_user&.user_option&.text_size_seq
+    if cookie_seq && server_seq && cookie_seq.to_i >= server_seq &&
+              UserOption.text_sizes.keys.include?(requested_cookie_size&.to_sym)
+      cookie_size = requested_cookie_size
+    end
+
+    size = cookie_size || current_user&.user_option&.text_size || SiteSetting.default_text_size
+    "text-size-#{size}"
   end
 
   def escape_unicode(javascript)
@@ -192,24 +212,22 @@ module ApplicationHelper
     opts ||= {}
     opts[:url] ||= "#{Discourse.base_url_no_prefix}#{request.fullpath}"
 
-    if opts[:image].blank? && (SiteSetting.default_opengraph_image_url.present? || SiteSetting.twitter_summary_large_image_url.present?)
-      opts[:twitter_summary_large_image] = SiteSetting.twitter_summary_large_image_url if SiteSetting.twitter_summary_large_image_url.present?
-      opts[:image] = SiteSetting.default_opengraph_image_url.present? ? SiteSetting.default_opengraph_image_url : SiteSetting.twitter_summary_large_image_url
-    elsif opts[:image].blank? && SiteSetting.apple_touch_icon_url.present?
-      opts[:image] = SiteSetting.apple_touch_icon_url
+    twitter_summary_large_image_url =
+      SiteSetting.site_twitter_summary_large_image_url
+
+    opengraph_image_url = SiteSetting.opengraph_image_url
+
+    if opts[:image].blank? && (opengraph_image_url.present? || twitter_summary_large_image_url.present?)
+      opts[:twitter_summary_large_image] = twitter_summary_large_image_url if twitter_summary_large_image_url.present?
+      opts[:image] = opengraph_image_url.present? ? opengraph_image_url : twitter_summary_large_image_url
+    elsif opts[:image].blank? && SiteSetting.site_apple_touch_icon_url.present?
+      opts[:image] = SiteSetting.site_apple_touch_icon_url
     end
 
-    # Use the correct scheme for open graph image
-    if opts[:image].present?
-      if opts[:image].start_with?("//")
-        uri = URI(Discourse.base_url)
-        opts[:image] = "#{uri.scheme}:#{opts[:image]}"
-      elsif opts[:image].start_with?("/uploads/")
-        opts[:image] = "#{Discourse.base_url}#{opts[:image]}"
-      elsif GlobalSetting.relative_url_root && opts[:image].start_with?(GlobalSetting.relative_url_root)
-        opts[:image] = "#{Discourse.base_url_no_prefix}#{opts[:image]}"
-      end
-    end
+    # Use the correct scheme for opengraph/twitter image
+    opts[:image] = get_absolute_image_url(opts[:image]) if opts[:image].present?
+    opts[:twitter_summary_large_image] =
+      get_absolute_image_url(opts[:twitter_summary_large_image]) if opts[:twitter_summary_large_image].present?
 
     # Add opengraph & twitter tags
     result = []
@@ -271,7 +289,13 @@ module ApplicationHelper
   end
 
   def application_logo_url
-    @application_logo_url ||= (mobile_view? && SiteSetting.mobile_logo_url).presence || SiteSetting.logo_url
+    @application_logo_url ||= begin
+      if mobile_view? && SiteSetting.site_mobile_logo_url
+        SiteSetting.site_mobile_logo_url
+      else
+        SiteSetting.site_home_logo_url
+      end
+    end
   end
 
   def login_path
@@ -388,8 +412,13 @@ module ApplicationHelper
   end
 
   def theme_lookup(name)
-    lookup = Theme.lookup_field(theme_ids, mobile_view? ? :mobile : :desktop, name)
-    lookup.html_safe if lookup
+    Theme.lookup_field(theme_ids, mobile_view? ? :mobile : :desktop, name)
+      &.html_safe
+  end
+
+  def theme_translations_lookup
+    Theme.lookup_field(theme_ids, :translations, I18n.locale)
+      &.html_safe
   end
 
   def discourse_stylesheet_link_tag(name, opts = {})
@@ -417,13 +446,18 @@ module ApplicationHelper
       base_uri: Discourse::base_uri,
       environment: Rails.env,
       letter_avatar_version: LetterAvatar.version,
-      markdown_it_url: asset_url('markdown-it-bundle.js'),
+      markdown_it_url: script_asset_path('markdown-it-bundle'),
       service_worker_url: service_worker_url,
       default_locale: SiteSetting.default_locale,
       asset_version: Discourse.assets_digest,
       disable_custom_css: loading_admin?,
       highlight_js_path: HighlightJs.path,
+      svg_sprite_path: SvgSprite.path,
     }
+
+    if Rails.env.development?
+      setup_data[:svg_icon_list] = SvgSprite.all_icons
+    end
 
     if guardian.can_enable_safe_mode? && params["safe_mode"]
       setup_data[:safe_mode] = normalized_safe_mode
@@ -435,5 +469,18 @@ module ApplicationHelper
     end
 
     setup_data
+  end
+
+  def get_absolute_image_url(link)
+    absolute_url = link
+    if link.start_with?("//")
+      uri = URI(Discourse.base_url)
+      absolute_url = "#{uri.scheme}:#{link}"
+    elsif link.start_with?("/uploads/")
+      absolute_url = "#{Discourse.base_url}#{link}"
+    elsif GlobalSetting.relative_url_root && link.start_with?(GlobalSetting.relative_url_root)
+      absolute_url = "#{Discourse.base_url_no_prefix}#{link}"
+    end
+    absolute_url
   end
 end

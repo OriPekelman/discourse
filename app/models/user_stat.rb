@@ -101,7 +101,7 @@ class UserStat < ActiveRecord::Base
   end
 
   def self.cache_last_seen(id, val)
-    $redis.set(last_seen_key(id), val)
+    $redis.setex(last_seen_key(id), MAX_TIME_READ_DIFF, val)
   end
 
   protected
@@ -130,4 +130,7 @@ end
 #  topic_count              :integer          default(0), not null
 #  bounce_score             :float            default(0.0), not null
 #  reset_bounce_score_after :datetime
+#  flags_agreed             :integer          default(0), not null
+#  flags_disagreed          :integer          default(0), not null
+#  flags_ignored            :integer          default(0), not null
 #

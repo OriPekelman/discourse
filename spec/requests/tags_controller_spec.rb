@@ -319,14 +319,33 @@ describe TagsController do
         expect(json['results'].map { |j| j['id'] }).to eq(['tag', 'tag2'])
       end
 
-      it "can say if given tag is not allowed" do
-        yup, nope = Fabricate(:tag, name: 'yup'), Fabricate(:tag, name: 'nope')
-        category = Fabricate(:category, tags: [yup])
-        get "/tags/filter/search.json", params: { q: 'nope', categoryId: category.id }
-        expect(response.status).to eq(200)
-        json = ::JSON.parse(response.body)
-        expect(json["results"].map { |j| j["id"] }.sort).to eq([])
-        expect(json["forbidden"]).to be_present
+      context 'with category restriction' do
+        let(:yup) { Fabricate(:tag, name: 'yup') }
+        let(:category) { Fabricate(:category, tags: [yup]) }
+
+        it "can say if given tag is not allowed" do
+          nope = Fabricate(:tag, name: 'nope')
+          get "/tags/filter/search.json", params: { q: nope.name, categoryId: category.id }
+          expect(response.status).to eq(200)
+          json = ::JSON.parse(response.body)
+          expect(json["results"].map { |j| j["id"] }.sort).to eq([])
+          expect(json["forbidden"]).to be_present
+          expect(json["forbidden_message"]).to eq(I18n.t("tags.forbidden.in_this_category", tag_name: nope.name))
+        end
+
+        it "can say if given tag is restricted to different category" do
+          category
+          get "/tags/filter/search.json", params: { q: yup.name, categoryId: Fabricate(:category).id }
+          json = ::JSON.parse(response.body)
+          expect(json["results"].map { |j| j["id"] }.sort).to eq([])
+          expect(json["forbidden"]).to be_present
+          expect(json["forbidden_message"]).to eq(I18n.t(
+            "tags.forbidden.restricted_to",
+            count: 1,
+            tag_name: yup.name,
+            category_names: category.name
+          ))
+        end
       end
 
       it "matches tags after sanitizing input" do
@@ -386,6 +405,45 @@ describe TagsController do
           expect(json['error_type']).to eq('not_found')
         end
       end
+    end
+  end
+
+  describe '#unused' do
+    it "fails if you can't manage tags" do
+      sign_in(Fabricate(:user))
+      get "/tags/unused.json"
+      expect(response.status).to eq(403)
+      delete "/tags/unused.json"
+      expect(response.status).to eq(403)
+    end
+
+    context 'logged in' do
+      before do
+        sign_in(Fabricate(:admin))
+      end
+
+      context 'with some tags' do
+        let!(:tags) { [
+          Fabricate(:tag, name: "used_publically", topic_count: 2, pm_topic_count: 0),
+          Fabricate(:tag, name: "used_privately", topic_count: 0, pm_topic_count: 3),
+          Fabricate(:tag, name: "used_everywhere", topic_count: 0, pm_topic_count: 3),
+          Fabricate(:tag, name: "unused1", topic_count: 0, pm_topic_count: 0),
+          Fabricate(:tag, name: "unused2", topic_count: 0, pm_topic_count: 0)
+        ]}
+
+        it 'returns the correct unused tags' do
+          get "/tags/unused.json"
+          expect(response.status).to eq(200)
+          json = ::JSON.parse(response.body)
+          expect(json["tags"]).to contain_exactly("unused1", "unused2")
+        end
+
+        it 'deletes the correct tags' do
+          expect { delete "/tags/unused.json" }.to change { Tag.count }.by(-2) & change { UserHistory.count }.by(1)
+          expect(Tag.pluck(:name)).to contain_exactly("used_publically", "used_privately", "used_everywhere")
+        end
+      end
+
     end
   end
 

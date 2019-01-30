@@ -3,6 +3,7 @@ import TagsMixin from "select-kit/mixins/tags";
 import { default as computed } from "ember-addons/ember-computed-decorators";
 import renderTag from "discourse/lib/render-tag";
 import { escapeExpression } from "discourse/lib/utilities";
+import { iconHTML } from "discourse-common/lib/icon-library";
 const { get, isEmpty, run, makeArray } = Ember;
 
 export default ComboBox.extend(TagsMixin, {
@@ -52,7 +53,7 @@ export default ComboBox.extend(TagsMixin, {
       "mousedown touchstart",
       ".selected-tag",
       event => {
-        const $button = $(event.target);
+        const $button = $(event.target).closest(".selected-tag");
         this._destroyEvent(event);
         this.destroyTags(this.computeContentItem($button.attr("data-value")));
       }
@@ -67,7 +68,7 @@ export default ComboBox.extend(TagsMixin, {
 
   @computed("hasReachedMaximum")
   caretIcon(hasReachedMaximum) {
-    return hasReachedMaximum ? null : "plus fa-fw";
+    return hasReachedMaximum ? null : "plus";
   },
 
   @computed("tags")
@@ -125,7 +126,7 @@ export default ComboBox.extend(TagsMixin, {
           <button aria-label="${tag}" title="${tag}" class="selected-tag ${
           isHighlighted ? "is-highlighted" : ""
         }" data-value="${tag}">
-            ${tag}
+            ${tag} ${iconHTML("times")}
           </button>
         `;
       });
@@ -135,7 +136,7 @@ export default ComboBox.extend(TagsMixin, {
   },
 
   computeHeaderContent() {
-    let content = this._super();
+    let content = this._super(...arguments);
 
     const joinedTags = this.get("selection")
       .map(s => Ember.get(s, "value"))
@@ -181,6 +182,7 @@ export default ComboBox.extend(TagsMixin, {
     let results = json.results;
 
     context.set("termMatchesForbidden", json.forbidden ? true : false);
+    context.set("termMatchErrorMessage", json.forbidden_message);
 
     if (context.get("siteSettings.tags_sort_alphabetically")) {
       results = results.sort((a, b) => a.id > b.id);

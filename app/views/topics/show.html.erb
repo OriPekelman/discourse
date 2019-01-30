@@ -76,10 +76,10 @@
 <% if @topic_view.prev_page || @topic_view.next_page %>
   <div role='navigation' itemscope itemtype='http://schema.org/SiteNavigationElement'>
     <% if @topic_view.prev_page %>
-      <span itemprop='url'><%= link_to t(:prev_page), @topic_view.prev_page_path, rel: 'prev', itemprop: 'name' %></span>
+      <span itemprop='name'><%= link_to t(:prev_page), @topic_view.prev_page_path, rel: 'prev', itemprop: 'url' %></span>
     <% end %>
     <% if @topic_view.next_page %>
-      <span itemprop='url'><b><%= link_to t(:next_page), @topic_view.next_page_path, rel: 'next', itemprop: 'name' %></b></span>
+      <span itemprop='name'><b><%= link_to t(:next_page), @topic_view.next_page_path, rel: 'next', itemprop: 'url' %></b></span>
     <% end %>
   </div>
 <% end %>
@@ -104,16 +104,6 @@
 
 <% if @topic_view.print %>
   <% content_for :after_body do %>
-      <style media="print">
-        /* For readability */
-        a, a:visited {
-          color: #0088cc !important;
-        }
-      </style>
-      <script>
-        document.addEventListener("DOMContentLoaded", function() {
-          window.print();
-        });
-      </script>
+      <%= preload_script('print-page') %>
   <% end %>
 <% end %>

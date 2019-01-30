@@ -192,6 +192,52 @@ describe AdminDashboardData do
     end
   end
 
+  describe 'pwa_config_check' do
+    subject { described_class.new.pwa_config_check }
+
+    it 'alerts for large_icon missing' do
+      SiteSetting.large_icon = nil
+      expect(subject).to eq(I18n.t('dashboard.pwa_config_icon_warning', base_path: Discourse.base_path))
+    end
+
+    it 'alerts for incompatible large_icon' do
+      upload = UploadCreator.new(
+        file_from_fixtures('large_icon_incorrect.png'),
+        'large_icon',
+        for_site_setting: true
+      ).create_for(Discourse.system_user.id)
+      SiteSetting.large_icon = upload
+      expect(subject).to eq(I18n.t('dashboard.pwa_config_icon_warning', base_path: Discourse.base_path))
+    end
+
+    context 'when large_icon is correct' do
+      before do
+        upload = UploadCreator.new(
+          file_from_fixtures('large_icon_correct.png'),
+          'large_icon',
+          for_site_setting: true
+        ).create_for(Discourse.system_user.id)
+        SiteSetting.large_icon = upload
+      end
+
+      it 'alerts for short_title missing' do
+        SiteSetting.short_title = nil
+        expect(subject).to eq(I18n.t('dashboard.pwa_config_title_warning', base_path: Discourse.base_path))
+      end
+
+      it 'returns nil when everything is ok' do
+        upload = UploadCreator.new(
+          file_from_fixtures('large_icon_correct.png'),
+          'large_icon',
+          for_site_setting: true
+        ).create_for(Discourse.system_user.id)
+        SiteSetting.large_icon = upload
+        SiteSetting.short_title = 'title'
+        expect(subject).to be_nil
+      end
+    end
+  end
+
   describe 's3_config_check' do
     shared_examples 'problem detection for s3-dependent setting' do
       subject { described_class.new.s3_config_check }
@@ -306,7 +352,7 @@ describe AdminDashboardData do
 
     it 'returns nil if force_https site setting not enabled' do
       SiteSetting.force_https = false
-      expect(subject).to eq(I18n.t('dashboard.force_https_warning'))
+      expect(subject).to eq(I18n.t('dashboard.force_https_warning', base_path: Discourse.base_path))
     end
   end
 
@@ -339,12 +385,12 @@ describe AdminDashboardData do
 
     it 'returns a message if it was added' do
       described_class.add_problem_message(key)
-      expect(described_class.problem_message_check(key)).to eq(I18n.t(key))
+      expect(described_class.problem_message_check(key)).to eq(I18n.t(key, base_path: Discourse.base_path))
     end
 
     it 'returns a message if it was added with an expiry' do
       described_class.add_problem_message(key, 300)
-      expect(described_class.problem_message_check(key)).to eq(I18n.t(key))
+      expect(described_class.problem_message_check(key)).to eq(I18n.t(key, base_path: Discourse.base_path))
     end
   end
 

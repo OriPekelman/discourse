@@ -1,14 +1,14 @@
 {{#composer-body composer=model
                  showPreview=showPreview
-                 openIfDraft="openIfDraft"
-                 typed="typed"
-                 cancelled="cancelled"
-                 save="save"}}
+                 openIfDraft=(action "openIfDraft")
+                 typed=(action "typed")
+                 cancelled=(action "cancelled")
+                 save=(action "save")}}
 
   {{#if visible}}
       {{composer-messages composer=model
                           messageCount=messageCount
-                          addLinkLookup="addLinkLookup"}}
+                          addLinkLookup=(action "addLinkLookup")}}
       {{#if model.viewOpenOrFullscreen}}
         <div class="reply-area {{if canEditTags 'with-tags'}}">
           <div class='composer-fields'>
@@ -16,11 +16,20 @@
             <div class='reply-to'>
               {{#unless model.viewFullscreen}}
                 <div class="reply-details">
-                  {{composer-action-title model=model canWhisper=canWhisper tabindex=8}}
+                  {{composer-action-title
+                    model=model
+                    openComposer=(action "openComposer")
+                    closeComposer=(action "closeComposer")
+                    canWhisper=canWhisper
+                    tabindex=8}}
+                  {{plugin-outlet name="composer-action-after" noTags=true args=(hash model=model)}}
 
                   {{#unless site.mobileView}}
-                    {{#if whisperOrUnlistTopicText}}
-                      <span class='whisper'>({{whisperOrUnlistTopicText}})</span>
+                    {{#if isWhispering}}
+                      <span class='whisper'>{{d-icon "far-eye-slash"}}</span>
+                    {{/if}}
+                    {{#if model.unlistTopic}}
+                      <span class='whisper'>({{i18n 'composer.unlist'}})</span>
                     {{/if}}
                     {{#if model.noBump}}
                       <span class="no-bump">{{d-icon "anchor"}}</span>
@@ -87,8 +96,9 @@
                             composer=model
                             lastValidatedAt=lastValidatedAt
                             canWhisper=canWhisper
-                            storeToolbarState="storeToolbarState"
+                            storeToolbarState=(action "storeToolbarState")
                             onPopupMenuAction=(action "onPopupMenuAction")
+                            showUploadModal=(route-action "showUploadSelector")
                             popupMenuOptions=popupMenuOptions
                             draftStatus=model.draftStatus
                             isUploading=isUploading
@@ -98,11 +108,10 @@
                             uploadProgress=uploadProgress
                             groupsMentioned="groupsMentioned"
                             cannotSeeMention="cannotSeeMention"
-                            importQuote="importQuote"
-                            togglePreview="togglePreview"
+                            importQuote=(action "importQuote")
+                            togglePreview=(action "togglePreview")
                             showToolbar=showToolbar
-                            showUploadSelector="showUploadSelector"
-                            afterRefresh="afterRefresh"}}
+                            afterRefresh=(action "afterRefresh")}}
 
           <div class='submit-panel'>
             {{plugin-outlet name="composer-fields-below" args=(hash model=model)}}
@@ -110,8 +119,8 @@
             <div class='save-or-cancel'>
               {{#unless model.viewFullscreen}}
                 {{composer-save-button action=(action "save")
-                                       icon=model.saveIcon
-                                       label=model.saveLabel
+                                       icon=saveIcon
+                                       label=saveLabel
                                        disableSubmit=disableSubmit}}
 
               {{#if site.mobileView}}
@@ -119,7 +128,7 @@
                   {{#if canEdit}}
                     {{d-icon "times"}}
                   {{else}}
-                    {{d-icon "trash-o"}}
+                    {{d-icon "far-trash-alt"}}
                   {{/if}}
                 </a>
               {{else}}
@@ -131,7 +140,7 @@
               {{#if site.mobileView}}
                 {{#if whisperOrUnlistTopic}}
                   <span class='whisper'>
-                    {{d-icon "eye-slash"}}
+                    {{d-icon "far-eye-slash"}}
                   </span>
                 {{/if}}
                 {{#if model.noBump}}
@@ -149,6 +158,9 @@
                 </div>
               {{/if}}
               <div id='draft-status' class="{{if isUploading 'hidden'}}">
+                {{#if model.draftConflictUser}}
+                  {{avatar model.draftConflictUser imageSize="small"}}
+                {{/if}}
                 {{model.draftStatus}}
               </div>
             </div>
@@ -162,7 +174,7 @@
                 {{/if}}
 
                 {{#if showPreview}}
-                  {{d-button action='togglePreview' class='hide-preview' label='composer.hide_preview'}}
+                  {{d-button action=(action "togglePreview") class="hide-preview" label="composer.hide_preview"}}
                 {{/if}}
               {{else}}
                 <a href {{action "togglePreview"}} class='toggle-preview'>{{{toggleText}}}</a>
@@ -172,7 +184,7 @@
           </div>
         </div>
 
-        {{else}}
+      {{else}}
         <div class='saving-text'>
           {{#if model.createdPost}}
             {{i18n 'composer.saved'}} <a class='permalink' href="{{unbound createdPost.url}}" {{action "viewNewReply"}}>{{i18n 'composer.view_new_post'}}</a>
@@ -183,14 +195,14 @@
 
         <div class='draft-text'>
           {{#if model.topic}}
-            {{d-icon "mail-forward"}} {{{draftTitle}}}
+            {{d-icon "share"}} {{{draftTitle}}}
           {{else}}
             {{i18n "composer.saved_draft"}}
           {{/if}}
         </div>
 
         {{composer-toggles composeState=model.composeState
-          toggleFullscreen=(action "fullscreenComposer")
+          toggleFullscreen=(action "openIfDraft")
           toggleComposer=(action "toggle")
           toggleToolbar=(action "toggleToolbar")}}
 

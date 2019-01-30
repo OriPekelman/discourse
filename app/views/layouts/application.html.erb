@@ -36,6 +36,7 @@
     <%- end %>
 
     <%- unless customization_disabled? %>
+      <%= raw theme_translations_lookup %>
       <%= raw theme_lookup("head_tag") %>
     <%- end %>
 
@@ -48,7 +49,6 @@
     <%- end %>
 
     <%= render partial: "common/discourse_stylesheet" %>
-    <%= render partial: "common/special_font_face" %>
 
     <%= yield :head %>
 
@@ -56,9 +56,8 @@
 
     <%= tag.meta id: 'data-discourse-setup', data: client_side_setup_data %>
 
-    <%- if !current_user && flash[:authentication_data] %>
-      <meta id="data-authentication" data-authentication-data="<%= flash[:authentication_data] %>">
-      <%= preload_script "authentication-complete" %>
+    <%- if !current_user && cookies[:authentication_data] %>
+      <meta id="data-authentication" data-authentication-data="<%= cookies.delete(:authentication_data) %>">
     <%- end %>
   </head>
 
@@ -82,7 +81,7 @@
       </div>
 
       <footer id='noscript-footer'>
-        <p><%= t 'powered_by_html' %></p>
+        <p style="text-align:center;"><%= t 'powered_by_html' %></p>
       </footer>
     </noscript>
 

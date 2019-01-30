@@ -2,24 +2,14 @@ name: app
 
 disk: 1024
 
-type: "ruby:2.4"
+type: "ruby:2.5"
 
 hooks:
     build: |
         set -x
-
-        [ -d "$PLATFORM_CACHE_DIR/bundle" ] && cp -rp "$PLATFORM_CACHE_DIR/bundle" vendor/bundle
-        bundle install --deployment --verbose --without test --without development --retry 3 --jobs 4
-
+        bundle install --deployment --without test --without development --retry 3 --jobs 4
         mv public/images _images
-        rm -rf "$PLATFORM_CACHE_DIR/bundle"
-        cp -rp vendor/bundle "$PLATFORM_CACHE_DIR/bundle"
-        cd /tmp
-        JHEAD_VERSION=3.00
-        curl -O http://www.sentex.net/~mwandel/jhead/jhead-$JHEAD_VERSION.tar.gz \
-          && tar zxf jhead-$JHEAD_VERSION.tar.gz \
-          && cd jhead-$JHEAD_VERSION \
-          && make && mv jhead $HOME/.global/bin/jhead
+        mv _bin/jhead $HOME/.global/bin/jhead
     deploy: |
         bundle exec rake db:migrate
     post_deploy: |

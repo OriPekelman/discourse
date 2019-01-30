@@ -121,10 +121,20 @@ describe PostsController do
       let(:url) { "/posts/#{post.id}/reply-history.json" }
     end
 
-    it 'asks post for reply history' do
-      post = Fabricate(:post)
-      get "/posts/#{post.id}/reply-history.json"
+    it "returns the replies with whitelisted user custom fields" do
+      parent = Fabricate(:post)
+      child = Fabricate(:post, topic: parent.topic, reply_to_post_number: parent.post_number)
+
+      parent.user.upsert_custom_fields(hello: 'world', hidden: 'dontshow')
+      SiteSetting.public_user_custom_fields = 'hello'
+
+      get "/posts/#{child.id}/reply-history.json"
       expect(response.status).to eq(200)
+
+      json = JSON.parse(response.body)
+      expect(json[0]['id']).to eq(parent.id)
+      expect(json[0]['user_custom_fields']['hello']).to eq('world')
+      expect(json[0]['user_custom_fields']['hidden']).to be_blank
     end
   end
 
@@ -134,9 +144,20 @@ describe PostsController do
     end
 
     it 'asks post for replies' do
-      p1 = Fabricate(:post)
-      get "/posts/#{p1.id}/replies.json"
+      parent = Fabricate(:post)
+      child = Fabricate(:post, topic: parent.topic, reply_to_post_number: parent.post_number)
+      PostReply.create!(post: parent, reply: child)
+
+      child.user.upsert_custom_fields(hello: 'world', hidden: 'dontshow')
+      SiteSetting.public_user_custom_fields = 'hello'
+
+      get "/posts/#{parent.id}/replies.json"
       expect(response.status).to eq(200)
+
+      json = JSON.parse(response.body)
+      expect(json[0]['id']).to eq(child.id)
+      expect(json[0]['user_custom_fields']['hello']).to eq('world')
+      expect(json[0]['user_custom_fields']['hidden']).to be_blank
     end
   end
 
@@ -220,6 +241,24 @@ describe PostsController do
           sign_in(poster)
           PostDestroyer.any_instance.expects(:destroy).twice
           delete "/posts/destroy_many.json", params: { post_ids: [post1.id], reply_post_ids: [post1.id] }
+        end
+      end
+
+      context "deleting flagged posts" do
+        let(:moderator) { Fabricate(:moderator) }
+
+        before do
+          PostAction.act(moderator, post1, PostActionType.types[:off_topic])
+          PostAction.act(moderator, post2, PostActionType.types[:off_topic])
+          Jobs::SendSystemMessage.clear
+        end
+
+        it "defers the posts" do
+          sign_in(moderator)
+          expect(PostAction.flagged_posts_count).to eq(2)
+          delete "/posts/destroy_many.json", params: { post_ids: [post1.id, post2.id], defer_flags: true }
+          expect(Jobs::SendSystemMessage.jobs.size).to eq(0)
+          expect(PostAction.flagged_posts_count).to eq(0)
         end
       end
     end
@@ -622,6 +661,15 @@ describe PostsController do
         put "/posts/#{post.id}/rebake.json"
         expect(response.status).to eq(200)
       end
+
+      it "will invalidate broken images cache" do
+        sign_in(Fabricate(:moderator))
+        post.custom_fields[Post::BROKEN_IMAGES] = ["https://example.com/image.jpg"].to_json
+        post.save_custom_fields
+        put "/posts/#{post.id}/rebake.json"
+        post.reload
+        expect(post.custom_fields[Post::BROKEN_IMAGES]).to be_nil
+      end
     end
   end
 
@@ -839,11 +887,17 @@ describe PostsController do
         raw = "this is a test post 123 #{SecureRandom.hash}"
         title = "this is a title #{SecureRandom.hash}"
 
-        post "/posts.json", params: { raw: raw, title: title, wpid: 1 }
+        expect do
+          post "/posts.json", params: { raw: raw, title: title, wpid: 1 }
+        end.to change { Post.count }
+
         expect(response.status).to eq(200)
 
-        post "/posts.json", params: { raw: raw, title: title, wpid: 2 }
-        expect(response).not_to be_successful
+        expect do
+          post "/posts.json", params: { raw: raw, title: title, wpid: 2 }
+        end.to_not change { Post.count }
+
+        expect(response.status).to eq(422)
       end
 
       it 'can not create a post in a disallowed category' do
@@ -1106,10 +1160,18 @@ describe PostsController do
         include_examples "it works"
       end
 
+      context "TL4 users" do
+        before do
+          sign_in(Fabricate(:trust_level_4))
+        end
+
+        include_examples "it works"
+      end
+
       context "users" do
         let(:topic) { Fabricate(:topic) }
 
-        [:user, :trust_level_4].each do |user|
+        [:user].each do |user|
           it "will raise an error for #{user}" do
             sign_in(Fabricate(user))
             post "/posts.json", params: {
@@ -1169,6 +1231,25 @@ describe PostsController do
       it "ensures trust level 4 can see the revisions" do
         sign_in(Fabricate(:user, trust_level: 4))
         get "/posts/#{post_revision.post_id}/revisions/#{post_revision.number}.json"
+        expect(response.status).to eq(200)
+      end
+    end
+
+    context "when post is hidden" do
+      before {
+        post.hidden = true
+        post.save
+      }
+
+      it "throws an exception for users" do
+        sign_in(Fabricate(:user))
+        get "/posts/#{post.id}/revisions/#{post_revision.number}.json"
+        expect(response.status).to eq(404)
+      end
+
+      it "works for admins" do
+        sign_in(Fabricate(:admin))
+        get "/posts/#{post.id}/revisions/#{post_revision.number}.json"
         expect(response.status).to eq(200)
       end
     end

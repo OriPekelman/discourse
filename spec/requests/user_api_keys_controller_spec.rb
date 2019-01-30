@@ -48,7 +48,7 @@ describe UserApiKeysController do
     it "supports a head request cleanly" do
       head "/user-api-key/new"
       expect(response.status).to eq(200)
-      expect(response.headers["Auth-Api-Version"]).to eq("2")
+      expect(response.headers["Auth-Api-Version"]).to eq("3")
     end
   end
 
@@ -156,7 +156,7 @@ describe UserApiKeysController do
 
       expect(parsed["nonce"]).to eq(args[:nonce])
       expect(parsed["push"]).to eq(false)
-      expect(parsed["api"]).to eq(2)
+      expect(parsed["api"]).to eq(3)
 
       key = user.user_api_keys.first
       expect(key.scopes).to include("push")
@@ -204,6 +204,41 @@ describe UserApiKeysController do
       post "/user-api-key.json", params: args
 
       expect(response.status).to eq(302)
+    end
+
+    it "will just show the payload if no redirect" do
+      user = Fabricate(:user, trust_level: 0)
+      sign_in(user)
+
+      args.delete(:auth_redirect)
+
+      SiteSetting.min_trust_level_for_user_api_key = 0
+      post "/user-api-key", params: args
+      expect(response.status).not_to eq(302)
+      payload = Nokogiri::HTML(response.body).at('code').content
+      encrypted = Base64.decode64(payload)
+      key = OpenSSL::PKey::RSA.new(private_key)
+      parsed = JSON.parse(key.private_decrypt(encrypted))
+      api_key = UserApiKey.find_by(key: parsed["key"])
+      expect(api_key.user_id).to eq(user.id)
+    end
+
+    it "will just show the JSON payload if no redirect" do
+      user = Fabricate(:user, trust_level: 0)
+      sign_in(user)
+
+      args.delete(:auth_redirect)
+
+      SiteSetting.min_trust_level_for_user_api_key = 0
+      post "/user-api-key.json", params: args
+      expect(response.status).not_to eq(302)
+      payload = JSON.parse(response.body)["payload"]
+      encrypted = Base64.decode64(payload)
+      key = OpenSSL::PKey::RSA.new(private_key)
+      parsed = JSON.parse(key.private_decrypt(encrypted))
+      api_key = UserApiKey.find_by(key: parsed["key"])
+      expect(api_key.user_id).to eq(user.id)
+
     end
   end
 end

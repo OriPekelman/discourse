@@ -216,6 +216,8 @@ class GroupsController < ApplicationController
 
     if params[:order] && %w{last_posted_at last_seen_at}.include?(params[:order])
       order = "#{params[:order]} #{dir} NULLS LAST"
+    elsif params[:order] == 'added_at'
+      order = "group_users.created_at #{dir}"
     end
 
     users = group.users.human_users
@@ -231,17 +233,21 @@ class GroupsController < ApplicationController
       end
     end
 
+    users = users.select('users.*, group_users.created_at as added_at')
+
     members = users
       .order('NOT group_users.owner')
       .order(order)
       .order(username_lower: dir)
       .limit(limit)
       .offset(offset)
+      .includes(:primary_group)
 
     owners = users
       .order(order)
       .order(username_lower: dir)
       .where('group_users.owner')
+      .includes(:primary_group)
 
     render json: {
       members: serialize_data(members, GroupUserSerializer),
@@ -321,7 +327,6 @@ class GroupsController < ApplicationController
 
     # Maintain backwards compatibility
     params[:usernames] = params[:username] if params[:username].present?
-    params[:user_ids] = params[:user_id] if params[:user_id].present?
     params[:user_emails] = params[:user_email] if params[:user_email].present?
 
     users = users_from_params
@@ -486,8 +491,11 @@ class GroupsController < ApplicationController
     if params[:usernames].present?
       users = User.where(username_lower: params[:usernames].split(",").map(&:downcase))
       raise Discourse::InvalidParameters.new(:usernames) if users.blank?
+    elsif params[:user_id].present?
+      users = User.where(id: params[:user_id].to_i)
+      raise Discourse::InvalidParameters.new(:user_id) if users.blank?
     elsif params[:user_ids].present?
-      users = User.where(id: params[:user_ids].split(","))
+      users = User.where(id: params[:user_ids].to_s.split(","))
       raise Discourse::InvalidParameters.new(:user_ids) if users.blank?
     elsif params[:user_emails].present?
       users = User.with_email(params[:user_emails].split(","))

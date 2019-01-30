@@ -20,7 +20,7 @@ class UsersController < ApplicationController
   skip_before_action :check_xhr, only: [
     :show, :badges, :password_reset, :update, :account_created,
     :activate_account, :perform_account_activation, :user_preferences_redirect, :avatar,
-    :my_redirect, :toggle_anon, :admin_login, :confirm_admin, :email_login
+    :my_redirect, :toggle_anon, :admin_login, :confirm_admin, :email_login, :summary
   ]
 
   before_action :respond_to_suspicious_request, only: [:create]
@@ -213,13 +213,20 @@ class UsersController < ApplicationController
   end
 
   def summary
-    user = fetch_user_from_params(include_inactive: current_user.try(:staff?) || (current_user && SiteSetting.show_inactive_accounts))
+    @user = fetch_user_from_params(include_inactive: current_user.try(:staff?) || (current_user && SiteSetting.show_inactive_accounts))
+    raise Discourse::NotFound unless guardian.can_see_profile?(@user)
 
-    raise Discourse::NotFound unless guardian.can_see_profile?(user)
-
-    summary = UserSummary.new(user, guardian)
+    summary = UserSummary.new(@user, guardian)
     serializer = UserSummarySerializer.new(summary, scope: guardian)
-    render_json_dump(serializer)
+    respond_to do |format|
+      format.html do
+        @restrict_fields = guardian.restrict_user_fields?(@user)
+        render :show
+      end
+      format.json do
+        render_json_dump(serializer)
+      end
+    end
   end
 
   def invited
@@ -269,8 +276,6 @@ class UsersController < ApplicationController
     usernames -= groups
     usernames.each(&:downcase!)
 
-    # Create a New Topic Scenario is not supported (per conversation with codinghorror)
-    # https://meta.discourse.org/t/taking-another-1-7-release-task/51986/7
     cannot_see = []
     topic_id = params[:topic_id]
     unless topic_id.blank?
@@ -497,6 +502,11 @@ class UsersController < ApplicationController
           Invite.invalidate_for_email(@user.email) # invite link can't be used to log in anymore
           secure_session["password-#{token}"] = nil
           secure_session["second-factor-#{token}"] = nil
+          UserHistory.create!(
+            target_user: @user,
+            acting_user: @user,
+            action: UserHistory.actions[:change_password]
+          )
           logon_after_password_reset
         end
       end
@@ -540,12 +550,19 @@ class UsersController < ApplicationController
             }
           end
         else
-          render json: {
-            is_developer: UsernameCheckerService.is_developer?(@user.email),
-            admin: @user.admin?,
-            second_factor_required: !valid_second_factor,
-            backup_enabled: @user.backup_codes_enabled?
-          }
+          if @error || @user&.errors&.any?
+            render json: {
+              message: @error,
+              errors: @user&.errors&.to_hash
+            }
+          else
+            render json: {
+              is_developer: UsernameCheckerService.is_developer?(@user.email),
+              admin: @user.admin?,
+              second_factor_required: !valid_second_factor,
+              backup_enabled: @user.backup_codes_enabled?
+            }
+          end
         end
       end
     end

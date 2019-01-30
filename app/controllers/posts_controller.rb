@@ -275,7 +275,18 @@ class PostsController < ApplicationController
 
   def reply_history
     post = find_post_from_params
-    render_serialized(post.reply_history(params[:max_replies].to_i, guardian), PostSerializer)
+
+    reply_history = post.reply_history(params[:max_replies].to_i, guardian)
+    user_custom_fields = {}
+    if (added_fields = User.whitelisted_user_custom_fields(guardian)).present?
+      user_custom_fields = User.custom_fields_for_ids(reply_history.pluck(:user_id), added_fields)
+    end
+
+    render_serialized(
+      reply_history,
+      PostSerializer,
+      user_custom_fields: user_custom_fields
+    )
   end
 
   def reply_ids
@@ -325,6 +336,7 @@ class PostsController < ApplicationController
 
   def destroy_many
     params.require(:post_ids)
+    defer_flags = params[:defer_flags] || false
 
     posts = Post.where(id: post_ids_including_replies)
     raise Discourse::InvalidParameters.new(:post_ids) if posts.blank?
@@ -333,7 +345,7 @@ class PostsController < ApplicationController
     posts.each { |p| guardian.ensure_can_delete!(p) }
 
     Post.transaction do
-      posts.each { |p| PostDestroyer.new(current_user, p).destroy }
+      posts.each { |p| PostDestroyer.new(current_user, p, defer_flags: defer_flags).destroy }
     end
 
     render body: nil
@@ -351,16 +363,28 @@ class PostsController < ApplicationController
   def replies
     post = find_post_from_params
     replies = post.replies.secured(guardian)
-    render_serialized(replies, PostSerializer)
+
+    user_custom_fields = {}
+    if (added_fields = User.whitelisted_user_custom_fields(guardian)).present?
+      user_custom_fields = User.custom_fields_for_ids(replies.pluck(:user_id), added_fields)
+    end
+
+    render_serialized(replies, PostSerializer, user_custom_fields: user_custom_fields)
   end
 
   def revisions
+    post = find_post_from_params
+    raise Discourse::NotFound if post.hidden && !guardian.can_view_hidden_post_revisions?
+
     post_revision = find_post_revision_from_params
     post_revision_serializer = PostRevisionSerializer.new(post_revision, scope: guardian, root: false)
     render_json_dump(post_revision_serializer)
   end
 
   def latest_revision
+    post = find_post_from_params
+    raise Discourse::NotFound if post.hidden && !guardian.can_view_hidden_post_revisions?
+
     post_revision = find_latest_post_revision_from_params
     post_revision_serializer = PostRevisionSerializer.new(post_revision, scope: guardian, root: false)
     render_json_dump(post_revision_serializer)
@@ -489,7 +513,7 @@ class PostsController < ApplicationController
     guardian.ensure_can_rebake!
 
     post = find_post_from_params
-    post.rebake!(invalidate_oneboxes: true)
+    post.rebake!(invalidate_oneboxes: true, invalidate_broken_images: true)
 
     render body: nil
   end

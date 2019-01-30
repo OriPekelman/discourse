@@ -4,6 +4,7 @@ import ComposerEditor from "discourse/components/composer-editor";
 import DiscourseBanner from "discourse/components/discourse-banner";
 import { addButton } from "discourse/widgets/post-menu";
 import { includeAttributes } from "discourse/lib/transform-post";
+import { registerHighlightJSLanguage } from "discourse/lib/highlight-syntax";
 import { addToolbarCallback } from "discourse/components/d-editor";
 import { addWidgetCleanCallback } from "discourse/components/mount-widget";
 import {
@@ -28,6 +29,7 @@ import {
   registerIconRenderer,
   replaceIcon
 } from "discourse-common/lib/icon-library";
+import { replaceCategoryLinkRenderer } from "discourse/helpers/category-link";
 import { addNavItem } from "discourse/models/nav-item";
 import { replaceFormatter } from "discourse/lib/utilities";
 import { modifySelectKit } from "select-kit/mixins/plugin-api";
@@ -39,7 +41,7 @@ import Sharing from "discourse/lib/sharing";
 import { addComposerUploadHandler } from "discourse/components/composer-editor";
 
 // If you add any methods to the API ensure you bump up this number
-const PLUGIN_API_VERSION = "0.8.25";
+const PLUGIN_API_VERSION = "0.8.27";
 
 class PluginApi {
   constructor(version, container) {
@@ -60,6 +62,7 @@ class PluginApi {
     opts = opts || {};
 
     if (this.container.cache[resolverName]) {
+      // eslint-disable-next-line no-console
       console.warn(
         `"${resolverName}" was already cached in the container. Changes won't be applied.`
       );
@@ -68,6 +71,7 @@ class PluginApi {
     const klass = this.container.factoryFor(resolverName);
     if (!klass) {
       if (!opts.ignoreMissing) {
+        // eslint-disable-next-line no-console
         console.warn(`"${resolverName}" was not found by modifyClass`);
       }
       return;
@@ -129,12 +133,20 @@ class PluginApi {
    *
    *   // for the place in code that render a string
    *   string() {
-   *     return "<i class='fa fa-smile-o'></i>";
+   *     return "<svg class=\"fa d-icon d-icon-far-smile svg-icon\" aria-hidden=\"true\"><use xlink:href=\"#far-smile\"></use></svg>";
    *   },
    *
    *   // for the places in code that render virtual dom elements
    *   node() {
-   *     return h('i', { className: 'fa fa-smile-o' });
+   *     return h("svg", {
+   *          attributes: { class: "fa d-icon d-icon-far-smile", "aria-hidden": true },
+   *          namespace: "http://www.w3.org/2000/svg"
+   *        },[
+   *          h("use", {
+   *          "xlink:href": attributeHook("http://www.w3.org/1999/xlink", `#far-smile`),
+   *          namespace: "http://www.w3.org/2000/svg"
+   *        })]
+   *     );
    *   }
    * });
    **/
@@ -365,7 +377,7 @@ class PluginApi {
    * api.addToolbarPopupMenuOptionsCallback(() => {
    *  return {
    *    action: 'toggleWhisper',
-   *    icon: 'eye-slash',
+   *    icon: 'far-eye-slash',
    *    label: 'composer.toggle_whisper',
    *    condition: "canWhisper"
    *  };
@@ -686,6 +698,7 @@ class PluginApi {
    */
   addNavigationBarItem(item) {
     if (!item["name"]) {
+      // eslint-disable-next-line no-console
       console.warn(
         "A 'name' is required when adding a Navigation Bar Item.",
         item
@@ -772,6 +785,37 @@ class PluginApi {
   addComposerUploadHandler(extensions, method) {
     addComposerUploadHandler(extensions, method);
   }
+
+  /**
+   * Registers a renderer that overrides the display of category links.
+   *
+   * Example:
+   *
+   * function testReplaceRenderer(category, opts) {
+   *   return "Hello World";
+   * }
+   * api.replaceCategoryLinkRenderer(categoryIconsRenderer);
+   **/
+  replaceCategoryLinkRenderer(fn) {
+    replaceCategoryLinkRenderer(fn);
+  }
+
+  /**
+   * Registers custom languages for use with HighlightJS.
+   *
+   * See https://highlightjs.readthedocs.io/en/latest/language-guide.html
+   * for instructions on how to define a new language for HighlightJS.
+   * Build minified language file by running "node tools/build.js -t cdn" in the HighlightJS repo
+   * and use the minified output as the registering function.
+   *
+   * Example:
+   *
+   * let aLang = function(e){return{cI:!1,c:[{bK:"GET HEAD PUT POST DELETE PATCH",e:"$",c:[{cN:"title",b:"/?.+"}]},{b:"^{$",e:"^}$",sL:"json"}]}}
+   * api.registerHighlightJSLanguage("kibana", aLang);
+   **/
+  registerHighlightJSLanguage(name, fn) {
+    registerHighlightJSLanguage(name, fn);
+  }
 }
 
 let _pluginv01;
@@ -806,6 +850,7 @@ function getPluginApi(version) {
     }
     return _pluginv01;
   } else {
+    // eslint-disable-next-line no-console
     console.warn(`Plugin API v${version} is not supported`);
   }
 }
@@ -843,6 +888,7 @@ export function resetPluginApi() {
 }
 
 export function decorateCooked() {
+  // eslint-disable-next-line no-console
   console.warn(
     "`decorateCooked` has been removed. Use `getPluginApi(version).decorateCooked` instead"
   );

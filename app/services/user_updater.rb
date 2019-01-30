@@ -37,7 +37,8 @@ class UserUpdater
     :theme_ids,
     :allow_private_messages,
     :homepage_id,
-    :hide_profile_and_presence
+    :hide_profile_and_presence,
+    :text_size
   ]
 
   def initialize(actor, user)
@@ -95,6 +96,10 @@ class UserUpdater
       end
     end
 
+    if attributes.key?(:text_size)
+      user.user_option.text_size_seq += 1 if user.user_option.text_size.to_s != attributes[:text_size]
+    end
+
     OPTION_ATTR.each do |attribute|
       if attributes.key?(attribute)
         save_options = true
@@ -123,9 +128,9 @@ class UserUpdater
         update_muted_users(attributes[:muted_usernames])
       end
 
+      name_changed = user.name_changed?
       if (saved = (!save_options || user.user_option.save) && user_profile.save && user.save) &&
-         (attributes[:name].present? && old_user_name.casecmp(attributes.fetch(:name)) != 0) ||
-         (attributes[:name].blank? && old_user_name.present?)
+         (name_changed && old_user_name.casecmp(attributes.fetch(:name)) != 0)
 
         StaffActionLogger.new(@actor).log_name_change(
           user.id,

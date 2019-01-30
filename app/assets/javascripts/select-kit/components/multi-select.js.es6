@@ -23,7 +23,7 @@ export default SelectKitComponent.extend({
   values: null,
 
   init() {
-    this._super();
+    this._super(...arguments);
 
     this.set("computedValues", []);
 
@@ -39,7 +39,9 @@ export default SelectKitComponent.extend({
   @on("didRender")
   _setChoicesMaxWidth() {
     const width = this.$body().outerWidth(false);
-    this.$(".choices").css({ maxWidth: width });
+    if (width > 0) {
+      this.$(".choices").css({ maxWidth: width });
+    }
   },
 
   @on("didReceiveAttrs")
@@ -112,6 +114,11 @@ export default SelectKitComponent.extend({
     this.set("values", computedValues);
   },
   mutateContent() {},
+
+  forceValues(values) {
+    this.mutateValues(values);
+    this._compute();
+  },
 
   filterComputedContent(computedContent, computedValues, filter) {
     return computedContent.filter(c => {
@@ -259,6 +266,17 @@ export default SelectKitComponent.extend({
       );
       this._boundaryActionHandler("onSelectNone");
       this.clearSelection();
+      return;
+    }
+
+    if (computedContentItem.__sk_row_type === "noopRow") {
+      applyOnSelectPluginApiCallbacks(
+        this.get("pluginApiIdentifiers"),
+        computedContentItem.value,
+        this
+      );
+
+      this._boundaryActionHandler("onSelect", computedContentItem.value);
       return;
     }
 

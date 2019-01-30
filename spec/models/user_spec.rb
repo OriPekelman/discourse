@@ -194,7 +194,7 @@ describe User do
     end
   end
 
-  describe 'delete posts' do
+  describe 'delete posts in batches' do
     before do
       @post1 = Fabricate(:post)
       @user = @post1.user
@@ -205,8 +205,15 @@ describe User do
       @queued_post = Fabricate(:queued_post, user: @user)
     end
 
-    it 'allows moderator to delete all posts' do
-      @user.delete_all_posts!(@guardian)
+    it 'deletes only one batch of posts' do
+      deleted_posts = @user.delete_posts_in_batches(@guardian, 1)
+      expect(Post.where(id: @posts.map(&:id)).count).to eq(2)
+      expect(deleted_posts.length).to eq(1)
+      expect(deleted_posts[0]).to eq(@post2)
+    end
+
+    it 'correctly deletes posts and topics' do
+      @user.delete_posts_in_batches(@guardian, 20)
       expect(Post.where(id: @posts.map(&:id))).to be_empty
       expect(QueuedPost.where(user_id: @user.id).count).to eq(0)
       @posts.each do |p|
@@ -220,7 +227,7 @@ describe User do
       invalid_guardian = Guardian.new(Fabricate(:user))
 
       expect do
-        @user.delete_all_posts!(invalid_guardian)
+        @user.delete_posts_in_batches(invalid_guardian)
       end.to raise_error Discourse::InvalidAccess
 
       @posts.each do |p|
@@ -418,8 +425,8 @@ describe User do
       user = Fabricate(:user)
       expect(user.associated_accounts).to eq([])
 
-      TwitterUserInfo.create(user_id: user.id, screen_name: "sam", twitter_user_id: 1)
-      FacebookUserInfo.create(user_id: user.id, username: "sam", facebook_user_id: 1)
+      UserAssociatedAccount.create(user_id: user.id, provider_name: "twitter", provider_uid: "1", info: { nickname: "sam" })
+      UserAssociatedAccount.create(user_id: user.id, provider_name: "facebook", provider_uid: "1234", info: { email: "test@example.com" })
       GoogleUserInfo.create(user_id: user.id, email: "sam@sam.com", google_user_id: 1)
       GithubUserInfo.create(user_id: user.id, screen_name: "sam", github_user_id: 1)
       InstagramUserInfo.create(user_id: user.id, screen_name: "sam", instagram_user_id: "examplel123123")
@@ -1378,7 +1385,7 @@ describe User do
       expect(user.title).to eq("bars and wats")
       expect(user.trust_level).to eq(1)
       expect(user.manual_locked_trust_level).to be_nil
-      expect(user.group_locked_trust_level).to eq(1)
+      expect(user.group_granted_trust_level).to eq(1)
     end
   end
 
@@ -1668,6 +1675,26 @@ describe User do
     end
   end
 
+  describe "#unread_notifications" do
+    before do
+      User.max_unread_notifications = 3
+    end
+
+    after do
+      User.max_unread_notifications = nil
+    end
+
+    it "limits to MAX_UNREAD_NOTIFICATIONS" do
+      user = Fabricate(:user)
+
+      4.times do
+        Notification.create!(user_id: user.id, notification_type: 1, read: false, data: '{}')
+      end
+
+      expect(user.unread_notifications).to eq(3)
+    end
+  end
+
   describe "#unstage" do
     let!(:staged_user) { Fabricate(:staged, email: 'staged@account.com', active: true, username: 'staged1', name: 'Stage Name') }
     let(:params) { { email: 'staged@account.com', active: true, username: 'unstaged1', name: 'Foo Bar' } }
@@ -1895,6 +1922,71 @@ describe User do
 
       BadgeGranter.revoke(UserBadge.find_by(user_id: user.id, badge_id: badge.id))
       expect(user.next_best_title).to eq(nil)
+    end
+  end
+
+  describe 'check_site_contact_username' do
+    before { SiteSetting.site_contact_username = contact_user.username }
+
+    context 'admin' do
+      let(:contact_user) { Fabricate(:admin) }
+
+      it 'clears site_contact_username site setting when admin privilege is revoked' do
+        contact_user.revoke_admin!
+        expect(SiteSetting.site_contact_username).to eq(SiteSetting.defaults[:site_contact_username])
+      end
+    end
+
+    context 'moderator' do
+      let(:contact_user) { Fabricate(:moderator) }
+
+      it 'clears site_contact_username site setting when moderator privilege is revoked' do
+        contact_user.revoke_moderation!
+        expect(SiteSetting.site_contact_username).to eq(SiteSetting.defaults[:site_contact_username])
+      end
+    end
+
+    context 'admin and moderator' do
+      let(:contact_user) { Fabricate(:moderator, admin: true) }
+
+      it 'does not change site_contact_username site setting when admin privilege is revoked' do
+        contact_user.revoke_admin!
+        expect(SiteSetting.site_contact_username).to eq(contact_user.username)
+      end
+
+      it 'does not change site_contact_username site setting when moderator privilege is revoked' do
+        contact_user.revoke_moderation!
+        expect(SiteSetting.site_contact_username).to eq(contact_user.username)
+      end
+
+      it 'clears site_contact_username site setting when staff privileges are revoked' do
+        contact_user.revoke_admin!
+        contact_user.revoke_moderation!
+        expect(SiteSetting.site_contact_username).to eq(SiteSetting.defaults[:site_contact_username])
+      end
+    end
+  end
+
+  context "#destroy!" do
+    it 'clears up associated data on destroy!' do
+      user = Fabricate(:user)
+      post = Fabricate(:post)
+
+      PostAction.act(user, post, PostActionType.types[:like])
+      PostAction.remove_act(user, post, PostActionType.types[:like])
+
+      UserAction.create!(user_id: user.id, action_type: UserAction::LIKE)
+      UserAction.create!(user_id: -1, action_type: UserAction::LIKE, target_user_id: user.id)
+      UserAction.create!(user_id: -1, action_type: UserAction::LIKE, acting_user_id: user.id)
+
+      user.reload
+
+      user.destroy!
+
+      expect(UserAction.where(user_id: user.id).length).to eq(0)
+      expect(UserAction.where(target_user_id: user.id).length).to eq(0)
+      expect(UserAction.where(acting_user_id: user.id).length).to eq(0)
+      expect(PostAction.with_deleted.where(user_id: user.id).length).to eq(0)
     end
   end
 end

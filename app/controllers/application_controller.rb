@@ -101,10 +101,6 @@ class ApplicationController < ActionController::Base
     end
   end
 
-  def slow_platform?
-    request.user_agent =~ /Android/
-  end
-
   def set_layout
     use_crawler_layout? ? 'crawler' : 'application'
   end
@@ -217,6 +213,10 @@ class ApplicationController < ActionController::Base
 
   rescue_from Discourse::ReadOnly do
     render_json_error I18n.t('read_only_mode_enabled'), type: :read_only, status: 503
+  end
+
+  rescue_from ActionController::ParameterMissing do |e|
+    render_json_error e.message, status: 400
   end
 
   def redirect_with_client_support(url, options)
@@ -454,7 +454,7 @@ class ApplicationController < ActionController::Base
   end
 
   def can_cache_content?
-    current_user.blank? && flash[:authentication_data].blank?
+    current_user.blank? && cookies[:authentication_data].blank?
   end
 
   # Our custom cache method
@@ -688,7 +688,9 @@ class ApplicationController < ActionController::Base
     return if current_user || (request.format.json? && is_api?)
 
     if SiteSetting.login_required?
+
       flash.keep
+      dont_cache_page
 
       if SiteSetting.enable_sso?
         # save original URL in a session so we can redirect after login
