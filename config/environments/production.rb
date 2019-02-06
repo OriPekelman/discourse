@@ -19,7 +19,7 @@ Discourse::Application.configure do
 
   # Generate digests for assets URLs
   config.assets.digest = true
-
+  
   config.log_level = :info
 
   if GlobalSetting.smtp_address

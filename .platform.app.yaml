@@ -1,0 +1,62 @@
+name: app
+
+disk: 1024
+
+type: "ruby:2.5"
+
+hooks:
+    build: |
+        set -x
+        bundle install --without test --without development --retry 3 --jobs 4
+        mv public/images _images
+        rm config/discourse.conf
+        mv config/discourse.platformsh.conf config/discourse.conf
+        mv _bin/jhead $HOME/.global/bin/jhead
+    deploy: bundle exec rake db:migrate
+    post_deploy: |
+        set -e
+        cp -R _images/* public/images/
+        bundle exec bin/rake assets:precompile
+dependencies:
+  nodejs:
+    yarn: "*"
+    svgo: "*"
+    gifsicle: "*"
+  ruby:
+    foreman: "*"
+relationships:
+    postgresql: "postgresql:postgresql"
+    redis: "redis:redis"
+mounts:
+   "/log": "shared:files/log"
+   "/tmp": "shared:files/tmp"
+   "/public/uploads": "shared:files/uploads"
+   "/public/plugins": "shared:files/plugins"
+   "/public/assets": "shared:files/assets"
+   "/public/backups": "shared:files/backups"
+   "/public/images": "shared:files/images"
+   "plugins/discourse-oauth2-basic/auto_generated/": "shared:files/discourse-oauth2-basic_auto_generated"
+   
+web:
+    upstream:
+        socket_family: unix
+    commands:
+        start: "foreman start -f Procfile_platform_sh"
+    locations:
+        "/":
+            root: "public"
+            passthru: true
+            expires: 1h
+            allow: true
+        "/assets":
+            root: "public/assets"
+            expires: 1y
+            allow: true
+        "/plugins":
+            root: "public/plugins"
+            expires: 1y
+            allow: true
+        "/images/emoji":
+            root: "public/images/emoji"
+            expires: 1y
+            allow: true
