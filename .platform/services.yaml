@@ -6,4 +6,5 @@ postgresql:
       - pg_trgm
       - hstore
 redis:
-  type: redis:3.2
+  type: redis-persistent:5.0
+  disk: 1024
