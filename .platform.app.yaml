@@ -7,15 +7,16 @@ type: "ruby:2.5"
 hooks:
     build: |
         set -x
-        bundle install --deployment --without test --without development --retry 3 --jobs 4
+        bundle install --without test --without development --retry 3 --jobs 4
         mv public/images _images
+        rm config/discourse.conf
+        mv config/discourse.platformsh.conf config/discourse.conf
         mv _bin/jhead $HOME/.global/bin/jhead
-    deploy: |
-        bundle exec rake db:migrate
+    deploy: bundle exec rake db:migrate
     post_deploy: |
         set -e
         cp -R _images/* public/images/
-        GIT_DISCOVERY_ACROSS_FILESYSTEM=1 RAILS_ENV=production bundle exec bin/rake assets:precompile
+        bundle exec bin/rake assets:precompile
 dependencies:
   nodejs:
     yarn: "*"
@@ -26,13 +27,6 @@ dependencies:
 relationships:
     postgresql: "postgresql:postgresql"
     redis: "redis:redis"
-variables:
-    env:
-        GIT_DISCOVERY_ACROSS_FILESYSTEM: "1"
-        RUBY_GC_HEAP_GROWTH_MAX_SLOTS: "40000"
-        RUBY_GC_HEAP_INIT_SLOTS: "400000"
-        RUBY_GC_HEAP_OLDOBJECT_LIMIT_FACTOR: "1.5"
-        RUBY_GLOBAL_METHOD_CACHE_SIZE: "131072"
 mounts:
    "/log": "shared:files/log"
    "/tmp": "shared:files/tmp"
@@ -48,7 +42,6 @@ web:
         socket_family: unix
     commands:
         start: "foreman start -f Procfile_platform_sh"
-
     locations:
         "/":
             root: "public"

@@ -52,6 +52,11 @@ bootsnap-compile-cache/
 !/plugins/discourse-narrative-bot
 !/plugins/discourse-presence
 !/plugins/discourse-local-dates
+# These currently go in submodules in Platform.sh, need to find a better way.
+!/plugins/discourse-oauth2-basic
+!/plugins/procourse-static-pages
+!/plugins/procourse-custom-homepage
+!/plugins/discourse-chat-integration
 /plugins/*/auto_generated/
 !/plugins/discourse-oauth2-basic
 !/plugins/procourse-static-pages
