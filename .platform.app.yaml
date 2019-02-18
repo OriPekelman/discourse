@@ -7,6 +7,7 @@ type: "ruby:2.5"
 hooks:
     build: |
         set -x
+        ./platform_sh_update_nodejs.sh
         bundle install --without test --without development --retry 3 --jobs 4
         mv public/images _images
         rm config/discourse.conf
@@ -15,6 +16,8 @@ hooks:
     deploy: bundle exec rake db:migrate
     post_deploy: |
         set -e
+        unset NPM_CONFIG_PREFIX
+        nvm use node
         cp -R _images/* public/images/
         bundle exec bin/rake assets:precompile
 dependencies:
