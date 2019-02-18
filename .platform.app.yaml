@@ -17,9 +17,10 @@ hooks:
     post_deploy: |
         set -e
         unset NPM_CONFIG_PREFIX
-        nvm use node
+        node --version
+        nodejs --version
         cp -R _images/* public/images/
-        bundle exec bin/rake assets:precompile
+        bundle exec bin/rake assets:precompile --trace
 dependencies:
   nodejs:
     yarn: "*"
