@@ -20,7 +20,15 @@ hooks:
         node --version
         nodejs --version
         cp -R _images/* public/images/
-        bundle exec bin/rake assets:precompile --trace
+        n=0
+        until [ $n -ge 3 ]
+        do
+          bundle exec bin/rake assets:precompile --trace && break  # substitute your command here
+          n=$[$n+1]
+          echo "Sleeping and retrying"
+          sleep 5
+        done
+
 dependencies:
   nodejs:
     yarn: "*"
