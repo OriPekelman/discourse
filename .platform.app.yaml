@@ -17,8 +17,6 @@ hooks:
     post_deploy: |
         set -e
         unset NPM_CONFIG_PREFIX
-        node --version
-        nodejs --version
         cp -R _images/* public/images/
         n=0
         until [ $n -ge 3 ]
